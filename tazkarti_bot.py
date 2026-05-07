@@ -40,9 +40,9 @@ def clean_team_name(name):
     if not name: return ""
     return re.sub(r'^نادي\s+', '', name).replace(" الرياضي", "").replace(" رياضي", "").strip()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8605376913:AAEZh8Ik_whfUsdq8ZRcV2Igu6Y54EWzN6I")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "@tazakeregy")
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://neondb_owner:npg_7CMqa2ZuLWob@ep-super-base-al6zg4ay.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
