@@ -533,7 +533,7 @@ def check_tickets_via_api():
             # 1. مباراة جديدة مفتوحة + فيها طابور
             if last_state is None and curr_status == STATUS_OPEN and curr_is_queue:
                 send_notification(
-                    f"🚨 {circles} مباراة جديدة {teams_label} (في طابور دلوقتي)! {circles} 🚨\n"
+                    f"🚨 {circles} مباراة جديدة {teams_label}! {circles} 🚨\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
