@@ -38,7 +38,12 @@ def format_arabic_date(date_str):
 
 def clean_team_name(name):
     if not name: return ""
-    return re.sub(r'^نادي\s+', '', name).replace(" الرياضي", "").replace(" رياضي", "").strip()
+    # Arabic cleaning
+    name = re.sub(r'^(نادي|النادي)\s+', '', name)
+    name = name.replace(" الرياضي", "").replace(" رياضي", "").replace(" للرياضة", "")
+    # English cleaning
+    name = re.sub(r'\s+(SC|FC|Club)$', '', name, flags=re.IGNORECASE)
+    return name.strip()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -275,8 +280,7 @@ def send_current_matches(message):
                 mid = match.get("matchId")
                 has_queue = mid in queue_ids or match.get("isUsedQueue", False)
 
-                full_text = f"{t1} {t2} {t1_en} {t2_en}".lower()
-                is_target = any(team.lower() in full_text for team in EGYPTIAN_LEAGUE_TEAMS)
+                is_target = is_popular_team(t1) or is_popular_team(t2) or is_popular_team(t1_en) or is_popular_team(t2_en)
 
                 if is_target:
                     found = True
@@ -312,18 +316,15 @@ def get_categories(match_id):
 
 def is_popular_team(team_name):
     if not team_name: return False
-    t_low = team_name.lower()
+    cleaned = clean_team_name(team_name).lower()
+    
+    # 1. منع الفرق اللي فيها كلمات "بنك" أو "bank" عشان دي مش فرق جماهيرية (زي البنك الأهلي)
+    if "بنك" in cleaned or "bank" in cleaned:
+        return False
+    
+    # 2. التأكد إن اسم الفريق فيه اسم من الفرق الجماهيرية المحددة
     for p in EGYPTIAN_LEAGUE_TEAMS:
-        p_low = p.lower()
-        if p_low in t_low:
-            if p_low == "الأهلي" and "البنك الأهلي" in t_low:
-                if t_low.count("الأهلي") == t_low.count("البنك الأهلي"):
-                    continue
-            if p_low == "al ahly" and ("national bank" in t_low or "bank al ahly" in t_low):
-                ahly_count = t_low.count("al ahly")
-                bank_count = t_low.count("national bank") + t_low.count("bank al ahly")
-                if ahly_count == bank_count:
-                    continue
+        if p.lower() in cleaned:
             return True
     return False
 
@@ -489,20 +490,34 @@ def check_tickets_via_api():
             gates_open_ar = format_arabic_date(gates_open)
 
             # تصفية الفرق المستهدفة
-            full_text = f"{t1} {t2} {t1_en} {t2_en}".lower()
             found_colors = []
             is_target = False
-            for team in EGYPTIAN_LEAGUE_TEAMS:
-                if team.lower() in full_text:
+            for t_name in [t1, t2, t1_en, t2_en]:
+                if is_popular_team(t_name):
                     is_target = True
-                    c = TEAM_COLORS.get(team, "🟢")
-                    if c not in found_colors:
-                        found_colors.append(c)
+                    # جلب اللون الخاص بالفريق
+                    cleaned_t = clean_team_name(t_name).lower()
+                    for color_team, color_val in TEAM_COLORS.items():
+                        if color_team.lower() in cleaned_t:
+                            if color_val not in found_colors:
+                                found_colors.append(color_val)
+                                break
 
             if not is_target:
                 continue
 
             circles = "".join(found_colors) or "🟢"
+
+            # تحديد التسمية المستخدمة في الإشعار (فريق واحد ولا فريقين)
+            is_p1 = is_popular_team(t1) or is_popular_team(t1_en)
+            is_p2 = is_popular_team(t2) or is_popular_team(t2_en)
+            
+            if is_p1 and is_p2:
+                teams_label = f"لنادي {t1_clean} و {t2_clean}"
+                match_label = f"مباراة {t1_clean} و {t2_clean}"
+            else:
+                teams_label = f"لنادي {t1_clean}"
+                match_label = f"مباراة {t1_clean}"
 
             # =============================================
             # استخراج الحالة السابقة
@@ -518,7 +533,7 @@ def check_tickets_via_api():
             # 1. مباراة جديدة مفتوحة + فيها طابور
             if last_state is None and curr_status == STATUS_OPEN and curr_is_queue:
                 send_notification(
-                    f"🚨 {circles} مباراة جديدة لنادي {t1_clean} (في طابور دلوقتي)! {circles} 🚨\n"
+                    f"🚨 {circles} مباراة جديدة {teams_label} (في طابور دلوقتي)! {circles} 🚨\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -534,7 +549,7 @@ def check_tickets_via_api():
             # 2. مباراة جديدة مفتوحة + بدون طابور
             elif last_state is None and curr_status == STATUS_OPEN and not curr_is_queue:
                 send_notification(
-                    f"🟢 {circles} مباراة جديدة لنادي {t1_clean} - ادخل احجز فوراً! {circles} 🟢\n"
+                    f"🟢 {circles} مباراة جديدة {teams_label} - ادخل احجز فوراً! {circles} 🟢\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -550,7 +565,7 @@ def check_tickets_via_api():
             # 3. مباراة جديدة مغلقة
             elif last_state is None and curr_status == STATUS_CLOSED:
                 send_notification(
-                    f"🔒 {circles} إغلاق حجز مباراة {t1_clean}! {circles} 🔒\n"
+                    f"🔒 {circles} إغلاق حجز {match_label}! {circles} 🔒\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -562,7 +577,7 @@ def check_tickets_via_api():
             elif last_status == STATUS_CLOSED and curr_status == STATUS_OPEN:
                 queue_note = "🚶‍♂️ خلي بالك، في طابور!" if curr_is_queue else "✅ الدخول مباشر، مفيش طابور!"
                 send_notification(
-                    f"💥 {circles} حجز مباراة {t1_clean} فتح من تاني! الحق بسرعة! {circles} 💥\n"
+                    f"💥 {circles} حجز {match_label} فتح من تاني! الحق بسرعة! {circles} 💥\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -577,7 +592,7 @@ def check_tickets_via_api():
             # 4. الحجز كان مفتوح واتقفل
             elif last_status == STATUS_OPEN and curr_status == STATUS_CLOSED:
                 send_notification(
-                    f"🛑 {circles} للأسف.. حجز مباراة {t1_clean} اتقفل! {circles} 🛑\n"
+                    f"🛑 {circles} للأسف.. حجز {match_label} اتقفل! {circles} 🛑\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -589,7 +604,7 @@ def check_tickets_via_api():
             elif (last_status == STATUS_OPEN and curr_status == STATUS_OPEN
                   and last_is_queue is True and curr_is_queue is False):
                 send_notification(
-                    f"🚀 {circles} طابور {t1_clean} خلص! ادخل احجز مباشر دلوقتي! {circles} 🚀\n"
+                    f"🚀 {circles} طابور {match_label} خلص! ادخل احجز مباشر دلوقتي! {circles} 🚀\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -605,7 +620,7 @@ def check_tickets_via_api():
             elif (last_status == STATUS_OPEN and curr_status == STATUS_OPEN
                   and last_is_queue is False and curr_is_queue is True):
                 send_notification(
-                    f"⚠️ {circles} تنبيه! طابور مباراة {t1_clean} بدأ! {circles} ⚠️\n"
+                    f"⚠️ {circles} تنبيه! طابور {match_label} بدأ! {circles} ⚠️\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
                     f"🏟️ الاستاد: {stadium}\n\n"
@@ -633,20 +648,22 @@ def check_tickets_via_api():
             db_m_id, db_t1, db_t2, db_stadium, db_kickoff = db_match
             if db_m_id not in api_match_ids:
                 # تصفية الفرق لمعرفة الألوان
-                full_text = f"{db_t1} {db_t2}".lower()
                 found_colors = []
-                for team in EGYPTIAN_LEAGUE_TEAMS:
-                    if team.lower() in full_text:
-                        c = TEAM_COLORS.get(team, "🟢")
-                        if c not in found_colors:
-                            found_colors.append(c)
+                for db_t in [db_t1, db_t2]:
+                    if is_popular_team(db_t):
+                        cleaned_db_t = clean_team_name(db_t).lower()
+                        for color_team, color_val in TEAM_COLORS.items():
+                            if color_team.lower() in cleaned_db_t:
+                                if color_val not in found_colors:
+                                    found_colors.append(color_val)
+                                    break
                 circles = "".join(found_colors) or "🟢"
 
                 db_t1_clean = clean_team_name(db_t1)
                 db_t2_clean = clean_team_name(db_t2)
                 db_kickoff_ar = format_arabic_date(db_kickoff)
                 send_notification(
-                    f"🛑 {circles} حجز مباراة {db_t1_clean} أُغلق! (بدأت أو اختفت) {circles} 🛑\n"
+                    f"🛑 {circles} حجز {match_label} أُغلق! (بدأت أو اختفت) {circles} 🛑\n"
                     f"━━━━━━━━━━━━━━━━━━\n"
                     f"🏆 {db_t1_clean} 🆚 {db_t2_clean}\n\n"
                     f"🏟️ الاستاد: {db_stadium}\n\n"
