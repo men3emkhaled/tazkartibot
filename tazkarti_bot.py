@@ -55,7 +55,7 @@ API_URL       = "https://tazkarti.com/data/matches-list-json.json"
 QUEUE_API_URL = "https://tazkarti.com/data/fanQueuesMatch-list-json.json"
 SEATS_API_URL = "https://tazkarti.com/data/TicketPrice-AvailableSeats-{match_id}.json"
 MATCHES_URL   = "https://tazkarti.com/#/matches"
-CHECK_INTERVAL_SECONDS = 5
+CHECK_INTERVAL_SECONDS = 2
 
 REQ_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -63,6 +63,9 @@ REQ_HEADERS = {
     "Pragma": "no-cache",
     "Accept": "application/json, text/plain, */*"
 }
+
+session = requests.Session()
+session.headers.update(REQ_HEADERS)
 
 STATUS_OPEN   = 1
 STATUS_CLOSED = 2
@@ -306,7 +309,7 @@ def get_categories(match_id):
     try:
         ts = int(time.time() * 1000)
         url = SEATS_API_URL.format(match_id=match_id)
-        r = requests.get(f"{url}?_={ts}", headers=REQ_HEADERS, timeout=10)
+        r = session.get(f"{url}?_={ts}", timeout=10)
         if r.status_code != 200:
             return []
         return r.json().get("data", [])
@@ -360,13 +363,12 @@ def is_category_targeted(cat_name, t1, t2, t1_en, t2_en):
     # 4. لو مش مكتوب عليها اسم أي فريق (زي المقصورة الرئيسية)، نعرضها عادي
     return True
 
-def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles):
+def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories):
     """
     يفحص تغيرات sold_out لكل درجة:
     - لو تحولت ل True  → تذاكر الدرجة دي خلصت!
     - لو تحولت ل False → تذاكر الدرجة دي فتحت تاني!
     """
-    categories = get_categories(match_id)
     if not categories:
         return
 
@@ -406,9 +408,8 @@ def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, ci
         if last_soldout != curr_soldout:
             upsert_soldout(match_id, cat_id, cat_name, price, curr_soldout)
 
-def get_seats_section(match_id, t1, t2, t1_en, t2_en):
+def get_seats_section(match_id, t1, t2, t1_en, t2_en, categories):
     """يرجع نص ملخص الدرجات (مفتوحة / خلصت) للإشعار"""
-    categories = get_categories(match_id)
     if not categories:
         return ""
     lines = []
@@ -527,8 +528,12 @@ def check_tickets_via_api():
             # 🔔 منطق الإشعارات
             # =============================================
 
-            # جلب قسم الدرجات للإشعار (مفتوحة / خلصت)
-            seats_section = get_seats_section(match_id, t1, t2, t1_en, t2_en) if curr_status == STATUS_OPEN else ""
+            # جلب قسم الدرجات للإشعار (مفتوحة / خلصت) مرة واحدة
+            categories = []
+            if curr_status == STATUS_OPEN:
+                categories = get_categories(match_id)
+            
+            seats_section = get_seats_section(match_id, t1, t2, t1_en, t2_en, categories) if curr_status == STATUS_OPEN else ""
 
             # 1. مباراة جديدة مفتوحة + فيها طابور
             if last_state is None and curr_status == STATUS_OPEN and curr_is_queue:
@@ -636,7 +641,7 @@ def check_tickets_via_api():
 
             # ⭐ فحص تغيرات sold_out لكل درجة (للمباريات المفتوحة فقط)
             if curr_status == STATUS_OPEN:
-                check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles)
+                check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories)
 
             # تحديث قاعدة البيانات فقط عند تغير الحالة
             state_changed = (last_state is None) or (last_state[0] != curr_status) or (last_state[1] != curr_is_queue)
