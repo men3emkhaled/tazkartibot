@@ -11,4 +11,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Run the bot
-CMD ["python", "tazkarti_bot.py"]
+CMD ["python", "-u", "tazkarti_bot.py"]
