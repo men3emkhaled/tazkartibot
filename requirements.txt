@@ -1,4 +1,11 @@
-requests
-python-dotenv
-pyTelegramBotAPI
-psycopg2-binary
+# Bot 1 - Monitoring Bot
+requests>=2.31.0
+pyTelegramBotAPI>=4.14.0
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0
+
+# Bot 2 - Booking Bot
+aiogram>=3.4.0
+httpx>=0.27.0
+cryptography>=42.0.0
+playwright>=1.40.0
