@@ -1,0 +1,47 @@
+<available_skills>
+  <skill>
+    <name>frontend</name>
+    <description>Build stunning, high-performance web interfaces with premium design aesthetics and modern architecture.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/frontend/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>human-coder</name>
+    <description>Professional human-like communication. Eliminates AI markers and excessive emojis.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/human-coder/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>qa-expert</name>
+    <description>Expertise in automated testing, bug hunting, and quality assurance benchmarks.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/qa-expert/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ux-expert</name>
+    <description>User-flow optimization, behavioral psychology, and WCAG 2.1 accessibility for digital products.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ux-expert/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>code-reviewer</name>
+    <description>Thorough, constructive code review focusing on correctness, security, and maintainability.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/code-reviewer/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>prompt-engineer</name>
+    <description>Craft precise, effective prompts for LLMs to maximize output quality and consistency.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/prompt-engineer/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>css-master</name>
+    <description>Deep CSS mastery: layouts, custom properties, cascade layers, and cutting-edge techniques.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/css-master/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>animation-expert</name>
+    <description>Craft fluid micro-interactions, page transitions, and physics-based animations that delight users.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/animation-expert/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>creative-ui-pro</name>
+    <description>Create visually stunning, award-worthy interfaces using advanced CSS and modern design trends.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/creative-ui-pro/SKILL.md</location>
+  </skill>
+</available_skills>

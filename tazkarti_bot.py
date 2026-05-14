@@ -5,6 +5,7 @@ import requests
 import psycopg2
 import threading
 import telebot
+import random
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -57,15 +58,35 @@ SEATS_API_URL = "https://tazkarti.com/data/TicketPrice-AvailableSeats-{match_id}
 MATCHES_URL   = "https://tazkarti.com/#/matches"
 CHECK_INTERVAL_SECONDS = 2
 
-REQ_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Cache-Control": "no-cache",
-    "Pragma": "no-cache",
-    "Accept": "application/json, text/plain, */*"
-}
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 OPR/109.0.0.0",
+]
+
+PROXY_URL = os.getenv("PROXY_URL")
+
+def get_random_headers():
+    ua = random.choice(USER_AGENTS)
+    return {
+        "User-Agent": ua,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Referer": "https://tazkarti.com/",
+        "Origin": "https://tazkarti.com",
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-site",
+    }
 
 session = requests.Session()
-session.headers.update(REQ_HEADERS)
+if PROXY_URL:
+    session.proxies = {"http": PROXY_URL, "https": PROXY_URL}
 
 STATUS_OPEN   = 1
 STATUS_CLOSED = 2
@@ -211,7 +232,7 @@ def get_queue_match_ids():
     """يرجع set من match_ids التي عندها طابور حالياً في الـ API المخصص للطوابير"""
     try:
         ts = int(time.time() * 1000)
-        r = requests.get(f"{QUEUE_API_URL}?_={ts}", headers=REQ_HEADERS, timeout=10)
+        r = session.get(f"{QUEUE_API_URL}?_={ts}", headers=get_random_headers(), timeout=10)
         r.raise_for_status()
         data = r.json()
         return {item["matchId"] for item in data}
@@ -256,7 +277,7 @@ def send_current_matches(message):
     bot.reply_to(message, "⏳ جاري الفحص...")
     try:
         ts = int(time.time() * 1000)
-        r = requests.get(f"{API_URL}?_={ts}", headers=REQ_HEADERS, timeout=15)
+        r = session.get(f"{API_URL}?_={ts}", headers=get_random_headers(), timeout=15)
         r.raise_for_status()
         matches = r.json()
         queue_ids = get_queue_match_ids()
@@ -309,7 +330,7 @@ def get_categories(match_id):
     try:
         ts = int(time.time() * 1000)
         url = SEATS_API_URL.format(match_id=match_id)
-        r = session.get(f"{url}?_={ts}", timeout=10)
+        r = session.get(f"{url}?_={ts}", headers=get_random_headers(), timeout=10)
         if r.status_code != 200:
             return []
         return r.json().get("data", [])
@@ -439,7 +460,7 @@ def check_tickets_via_api():
         print(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] جاري الفحص...")
 
         ts = int(time.time() * 1000)
-        r = requests.get(f"{API_URL}?_={ts}", headers=REQ_HEADERS, timeout=15)
+        r = session.get(f"{API_URL}?_={ts}", headers=get_random_headers(), timeout=15)
         r.raise_for_status()
         matches = r.json()
 
@@ -695,6 +716,8 @@ if __name__ == "__main__":
     try:
         while True:
             check_tickets_via_api()
-            time.sleep(CHECK_INTERVAL_SECONDS)
+            # Add random jitter between 0.5 and 1.5 seconds to the interval
+            jitter = random.uniform(0.5, 1.5)
+            time.sleep(CHECK_INTERVAL_SECONDS + jitter)
     except KeyboardInterrupt:
         print("\nتم إيقاف البوت. وداعاً!")
