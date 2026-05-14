@@ -558,11 +558,10 @@ def check_tickets_via_api():
             
             # 1. مباراة جديدة مفتوحة
             if last_state is None and curr_status == STATUS_OPEN:
-                queue_note = "🚶‍♂️ (طابور)" if curr_is_queue else "✅ (حجز مباشر)"
                 success = send_notification(
                     f"🟢 متاح للحجز الان 🟢\n\n"
                     f"{t1_clean} 🆚 {t2_clean}\n"
-                    f"{tour_label} {queue_note}\n\n"
+                    f"{tour_label}\n\n"
                     f"🔗 {MATCHES_URL}"
                 )
                 if success:
@@ -580,11 +579,10 @@ def check_tickets_via_api():
 
             # 3. الحجز كان مغلق وفتح
             elif last_status == STATUS_CLOSED and curr_status == STATUS_OPEN:
-                queue_note = "🚶‍♂️ (طابور)" if curr_is_queue else "✅ (حجز مباشر)"
                 success = send_notification(
                     f"💥 فتح الحجز من جديد! 💥\n\n"
                     f"{t1_clean} 🆚 {t2_clean}\n"
-                    f"{tour_label} {queue_note}\n\n"
+                    f"{tour_label}\n\n"
                     f"🔗 {MATCHES_URL}"
                 )
                 if success:
