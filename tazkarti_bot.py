@@ -40,7 +40,7 @@ def format_arabic_date(date_str):
 def clean_team_name(name):
     if not name: return ""
     # Arabic cleaning
-    name = re.sub(r'^(نادي|النادي)\s+', '', name)
+    name = re.sub(r'^(نادي|النادي|نادى|النادى)\s+', '', name)
     name = name.replace(" الرياضي", "").replace(" رياضي", "").replace(" للرياضة", "")
     # English cleaning
     name = re.sub(r'\s+(SC|FC|Club)$', '', name, flags=re.IGNORECASE)
@@ -247,8 +247,10 @@ def send_notification(msg):
     print(msg)
     try:
         bot.send_message(TELEGRAM_CHAT_ID, msg)
+        return True
     except Exception as e:
         print(f"❌ خطأ في الإرسال: {e}")
+        return False
 
 # ==========================================
 # 🤖 أوامر تليجرام
@@ -407,22 +409,16 @@ def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, ci
         # درجة جديدة خلصت من أول مرة
         if last_soldout is None and curr_soldout:
             send_notification(
-                f"🏆 {t1_clean} 🆚 {t2_clean}\n"
-                f"💔 {circles} تذاكر {cat_name} خلصت! {circles}\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"💰 السعر: {price} ج.م\n"
-                f"━━━━━━━━━━━━━━━━━━"
+                f"💔 تذاكر {cat_name} خلصت! 💔\n\n"
+                f"{t1_clean} 🆚 {t2_clean}"
             )
         # كانت خلصت وفتحت تاني
         elif last_soldout is True and not curr_soldout:
             send_notification(
-                f"🏆 {t1_clean} 🆚 {t2_clean}\n"
-                f"🎉 {circles} ضربة حظ! تذاكر {cat_name} فتحت تاني! {circles} 🎉\n"
-                f"━━━━━━━━━━━━━━━━━━\n"
-                f"💰 السعر: {price} ج.م\n"
-                f"🎟️ احجز فوراً قبل ما تتباع تاني!\n"
-                f"🔗 {MATCHES_URL}\n"
-                f"━━━━━━━━━━━━━━━━━━"
+                f"🎉 تذاكر {cat_name} فتحت تاني! 🎉\n\n"
+                f"{t1_clean} 🆚 {t2_clean}\n"
+                f"💰 السعر: {price} ج.م\n\n"
+                f"🔗 {MATCHES_URL}"
             )
 
         # تحديث قاعدة البيانات فقط في حالة التغيير
@@ -545,117 +541,76 @@ def check_tickets_via_api():
             # استخراج الحالة السابقة
             last_is_queue = last_state[1] if last_state else None
 
+            # استخراج بيانات البطولة والدور
+            tournament_data = match.get("tournament", {})
+            tour_name = tournament_data.get("nameAr", "")
+            round_name = match.get("roundNameAr", "")
+            tour_label = f"{tour_name} - {round_name}" if round_name else tour_name
+
             # =============================================
             # 🔔 منطق الإشعارات
             # =============================================
 
-            # جلب قسم الدرجات للإشعار (مفتوحة / خلصت) مرة واحدة
+            # جلب قسم الدرجات للمباريات المفتوحة
             categories = []
             if curr_status == STATUS_OPEN:
                 categories = get_categories(match_id)
             
-            seats_section = get_seats_section(match_id, t1, t2, t1_en, t2_en, categories) if curr_status == STATUS_OPEN else ""
-
-            # 1. مباراة جديدة مفتوحة + فيها طابور
-            if last_state is None and curr_status == STATUS_OPEN and curr_is_queue:
-                send_notification(
-                    f"🚨 {circles} مباراة جديدة {teams_label}! {circles} 🚨\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n\n"
-                    f"🚪 البوابات: {gates_open_ar}\n\n"
-                    f"🚶‍♂️ احجز مكانك في الطابور بسرعة قبل الزحمة!"
-                    f"{seats_section}\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏃‍♂️ يلا إلحق تذكرتك:\n"
+            # 1. مباراة جديدة مفتوحة
+            if last_state is None and curr_status == STATUS_OPEN:
+                queue_note = "🚶‍♂️ (طابور)" if curr_is_queue else "✅ (حجز مباشر)"
+                success = send_notification(
+                    f"🟢 متاح للحجز الان 🟢\n\n"
+                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"{tour_label} {queue_note}\n\n"
                     f"🔗 {MATCHES_URL}"
                 )
+                if success:
+                    upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
 
-            # 2. مباراة جديدة مفتوحة + بدون طابور
-            elif last_state is None and curr_status == STATUS_OPEN and not curr_is_queue:
-                send_notification(
-                    f"🟢 {circles} مباراة جديدة {teams_label} - ادخل احجز فوراً! {circles} 🟢\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n\n"
-                    f"🚪 البوابات: {gates_open_ar}\n\n"
-                    f"✅ الحجز شغال مباشر!"
-                    f"{seats_section}\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏃‍♂️ يلا إلحق تذكرتك:\n"
-                    f"🔗 {MATCHES_URL}"
-                )
-
-            # 3. مباراة جديدة مغلقة
+            # 2. مباراة جديدة مغلقة
             elif last_state is None and curr_status == STATUS_CLOSED:
-                send_notification(
-                    f"🔒 {circles} إغلاق حجز {match_label}! {circles} 🔒\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n"
-                    f"━━━━━━━━━━━━━━━━━━"
+                success = send_notification(
+                    f"🔒 إغلاق حجز 🔒\n\n"
+                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"{tour_label}"
                 )
+                if success:
+                    upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
 
-            # 4. الحجز كان مغلق وفتح
+            # 3. الحجز كان مغلق وفتح
             elif last_status == STATUS_CLOSED and curr_status == STATUS_OPEN:
-                queue_note = "🚶‍♂️ خلي بالك، في طابور!" if curr_is_queue else "✅ الدخول مباشر، مفيش طابور!"
-                send_notification(
-                    f"💥 {circles} حجز {match_label} فتح من تاني! الحق بسرعة! {circles} 💥\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n\n"
-                    f"{queue_note}"
-                    f"{seats_section}\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏃‍♂️ يلا إلحق تذكرتك:\n"
+                queue_note = "🚶‍♂️ (طابور)" if curr_is_queue else "✅ (حجز مباشر)"
+                success = send_notification(
+                    f"💥 فتح الحجز من جديد! 💥\n\n"
+                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"{tour_label} {queue_note}\n\n"
                     f"🔗 {MATCHES_URL}"
                 )
+                if success:
+                    upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
 
             # 4. الحجز كان مفتوح واتقفل
             elif last_status == STATUS_OPEN and curr_status == STATUS_CLOSED:
-                send_notification(
-                    f"🛑 {circles} للأسف.. حجز {match_label} اتقفل! {circles} 🛑\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n"
-                    f"━━━━━━━━━━━━━━━━━━"
+                success = send_notification(
+                    f"🛑 إغلاق الحجز 🛑\n\n"
+                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"{tour_label}"
                 )
+                if success:
+                    upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
 
-            # ⭐ 5. الطابور وقف والحجز لسا مفتوح!
+            # ⭐ 5. الطابور وقف أو بدأ
             elif (last_status == STATUS_OPEN and curr_status == STATUS_OPEN
-                  and last_is_queue is True and curr_is_queue is False):
-                send_notification(
-                    f"🚀 {circles} طابور {match_label} خلص! ادخل احجز مباشر دلوقتي! {circles} 🚀\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n\n"
-                    f"✅ الحجز مفتوح بدون طابور - الحق قبل النفاذ!"
-                    f"{seats_section}\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏃‍♂️ يلا إلحق تذكرتك:\n"
+                  and last_is_queue != curr_is_queue):
+                status_text = "🚀 دخول مباشر بدون طابور! 🚀" if not curr_is_queue else "⚠️ بدأ طابور الانتظار! ⚠️"
+                success = send_notification(
+                    f"{status_text}\n\n"
+                    f"{t1_clean} 🆚 {t2_clean}\n\n"
                     f"🔗 {MATCHES_URL}"
                 )
-
-            # 6. الطابور بدأ (مباراة كانت مفتوحة بدون طابور وأصبح عندها طابور)
-            elif (last_status == STATUS_OPEN and curr_status == STATUS_OPEN
-                  and last_is_queue is False and curr_is_queue is True):
-                send_notification(
-                    f"⚠️ {circles} تنبيه! طابور {match_label} بدأ! {circles} ⚠️\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🏟️ الاستاد: {stadium}\n\n"
-                    f"📅 الماتش: {kick_off_ar}\n\n"
-                    f"🚶‍♂️ في زحمة دلوقتي، ادخل احجز مكانك في الطابور\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏃‍♂️ يلا إلحق تذكرتك:\n"
-                    f"🔗 {MATCHES_URL}"
-                )
+                if success:
+                    upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
 
             else:
                 print(f"  ✅ لا تغيير: {t1_clean} ضد {t2_clean} | status={curr_status} | queue={curr_is_queue}")
@@ -664,10 +619,15 @@ def check_tickets_via_api():
             if curr_status == STATUS_OPEN:
                 check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories)
 
-            # تحديث قاعدة البيانات فقط عند تغير الحالة
+            # تحديث قاعدة البيانات فقط عند تغير الحالة (لو مفيش إشعار اتبعت فوق)
+            # ملحوظة: لو اتبعت إشعار فوق، الـ upsert_state تمت فعلياً، بس بنأكد هنا لو في حالة تانية
             state_changed = (last_state is None) or (last_state[0] != curr_status) or (last_state[1] != curr_is_queue)
-            if state_changed:
-                upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
+            
+            # بنحدث الحالة في الذاكرة والكاش حتى لو الإشعار فشل، عشان نمنع التكرار المزعج في الـ Logs 
+            # لكن في الكود اللي فوق، مش بنحدث الـ DB غير لو الإرسال نجح (للحالات المهمة)
+            if state_changed and last_state is not None: 
+                 # تحديث للحالات اللي مش بتبعت إشعارات (زي المباريات غير الهامة لو وجدت)
+                 upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
 
         # فحص المباريات التي اختفت من الموقع (كانت مفتوحة واختفت)
         for db_match in open_db_matches:
@@ -688,12 +648,13 @@ def check_tickets_via_api():
                 db_t1_clean = clean_team_name(db_t1)
                 db_t2_clean = clean_team_name(db_t2)
                 db_kickoff_ar = format_arabic_date(db_kickoff)
+                
+                # إعداد التسمية الصحيحة للمباراة المختفية
+                match_label_closed = f"مباراة {db_t1_clean} و {db_t2_clean}" if is_popular_team(db_t2) else f"مباراة {db_t1_clean}"
+
                 send_notification(
-                    f"🛑 {circles} حجز {match_label} أُغلق! (بدأت أو اختفت) {circles} 🛑\n"
-                    f"━━━━━━━━━━━━━━━━━━\n"
-                    f"🏆 {db_t1_clean} 🆚 {db_t2_clean}\n\n"
-                    f"🏟️ الاستاد: {db_stadium}\n\n"
-                    f"📅 الماتش: {db_kickoff_ar}\n"
+                    f"🛑 إغلاق الحجز 🛑\n\n"
+                    f"{db_t1_clean} 🆚 {db_t2_clean}\n"
                     f"━━━━━━━━━━━━━━━━━━"
                 )
                 upsert_state(db_m_id, STATUS_CLOSED, False, db_t1, db_t2, db_stadium, db_kickoff, "")
