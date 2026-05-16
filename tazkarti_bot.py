@@ -37,11 +37,19 @@ def format_arabic_date(date_str):
     except Exception:
         return date_str
 
+def normalize_arabic(text):
+    if not text: return ""
+    text = re.sub(r'[أإآ]', 'ا', text)
+    text = text.replace('ى', 'ي')
+    text = text.replace('ة', 'ه')
+    return text
+
 def clean_team_name(name):
     if not name: return ""
     # Arabic cleaning
     name = re.sub(r'^(نادي|النادي|نادى|النادى)\s+', '', name)
     name = name.replace(" الرياضي", "").replace(" رياضي", "").replace(" للرياضة", "")
+    name = name.replace(" الرياضى", "").replace(" رياضى", "")
     # English cleaning
     name = re.sub(r'\s+(SC|FC|Club)$', '', name, flags=re.IGNORECASE)
     return name.strip()
@@ -342,7 +350,7 @@ def get_categories(match_id):
 
 def is_popular_team(team_name):
     if not team_name: return False
-    cleaned = clean_team_name(team_name).lower()
+    cleaned = normalize_arabic(clean_team_name(team_name).lower())
     
     # 1. منع الفرق اللي فيها كلمات "بنك" أو "bank" عشان دي مش فرق جماهيرية (زي البنك الأهلي)
     if "بنك" in cleaned or "bank" in cleaned:
@@ -350,7 +358,7 @@ def is_popular_team(team_name):
     
     # 2. التأكد إن اسم الفريق فيه اسم من الفرق الجماهيرية المحددة
     for p in EGYPTIAN_LEAGUE_TEAMS:
-        if p.lower() in cleaned:
+        if normalize_arabic(p.lower()) in cleaned:
             return True
     return False
 
@@ -514,9 +522,9 @@ def check_tickets_via_api():
                 if is_popular_team(t_name):
                     is_target = True
                     # جلب اللون الخاص بالفريق
-                    cleaned_t = clean_team_name(t_name).lower()
+                    cleaned_t = normalize_arabic(clean_team_name(t_name).lower())
                     for color_team, color_val in TEAM_COLORS.items():
-                        if color_team.lower() in cleaned_t:
+                        if normalize_arabic(color_team.lower()) in cleaned_t:
                             if color_val not in found_colors:
                                 found_colors.append(color_val)
                                 break
@@ -635,9 +643,9 @@ def check_tickets_via_api():
                 found_colors = []
                 for db_t in [db_t1, db_t2]:
                     if is_popular_team(db_t):
-                        cleaned_db_t = clean_team_name(db_t).lower()
+                        cleaned_db_t = normalize_arabic(clean_team_name(db_t).lower())
                         for color_team, color_val in TEAM_COLORS.items():
-                            if color_team.lower() in cleaned_db_t:
+                            if normalize_arabic(color_team.lower()) in cleaned_db_t:
                                 if color_val not in found_colors:
                                     found_colors.append(color_val)
                                     break
