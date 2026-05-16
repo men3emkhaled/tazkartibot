@@ -300,7 +300,7 @@ def send_current_matches(message):
                 t2_clean = clean_team_name(t2)
                 
                 stadium = match.get("stadiumNameAr") or match.get("stadiumName", "")
-                kick_off = match.get("kickOffTime", "").replace("T", " ")
+                kick_off = (match.get("kickOffTime") or "").replace("T", " ")
                 kick_off_ar = format_arabic_date(kick_off)
                 max_t = match.get("maxTicketsPerUser", "")
                 mid = match.get("matchId")
@@ -501,8 +501,8 @@ def check_tickets_via_api():
             t2_clean = clean_team_name(t2)
             
             stadium    = match.get("stadiumNameAr") or match.get("stadiumName", "")
-            kick_off   = match.get("kickOffTime", "").replace("T", " ")
-            gates_open = match.get("gatesOpenTime", "").replace("T", " ")
+            kick_off   = (match.get("kickOffTime") or "").replace("T", " ")
+            gates_open = (match.get("gatesOpenTime") or "").replace("T", " ")
             
             kick_off_ar = format_arabic_date(kick_off)
             gates_open_ar = format_arabic_date(gates_open)
@@ -542,9 +542,9 @@ def check_tickets_via_api():
             last_is_queue = last_state[1] if last_state else None
 
             # استخراج بيانات البطولة والدور
-            tournament_data = match.get("tournament", {})
-            tour_name = tournament_data.get("nameAr", "")
-            round_name = match.get("roundNameAr", "")
+            tournament_data = match.get("tournament") or {}
+            tour_name = tournament_data.get("nameAr") or ""
+            round_name = match.get("roundNameAr") or ""
             tour_label = f"{tour_name} - {round_name}" if round_name else tour_name
 
             # =============================================
