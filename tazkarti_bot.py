@@ -48,8 +48,19 @@ def clean_team_name(name):
     if not name: return ""
     # Arabic cleaning
     name = re.sub(r'^(نادي|النادي|نادى|النادى)\s+', '', name)
-    name = name.replace(" الرياضي", "").replace(" رياضي", "").replace(" للرياضة", "")
-    name = name.replace(" الرياضى", "").replace(" رياضى", "")
+    
+    # تنظيف "للألعاب الرياضية" ومتغيراتها بالكامل أولاً لمنع بقاء حروف زائدة
+    name = re.sub(r'\s+للألعاب\s+الرياضي[ةهىي]', '', name)
+    name = re.sub(r'\s+للألعاب[ةهية]*', '', name)
+    name = re.sub(r'\s+للالعاب\s+الرياضي[ةهىي]', '', name)
+    name = re.sub(r'\s+للالعاب[ةهية]*', '', name)
+    
+    # تنظيف الكلمات الرياضية الأخرى
+    name = name.replace(" الرياضية", "").replace(" الرياضيه", "")
+    name = name.replace(" الرياضي", "").replace(" الرياضى", "")
+    name = name.replace(" للرياضة", "").replace(" للرياضه", "")
+    name = name.replace(" رياضي", "").replace(" رياضى", "")
+    
     # English cleaning
     name = re.sub(r'\s+(SC|FC|Club)$', '', name, flags=re.IGNORECASE)
     return name.strip()
