@@ -399,7 +399,7 @@ def is_category_targeted(cat_name, t1, t2, t1_en, t2_en):
     # 4. لو مش مكتوب عليها اسم أي فريق (زي المقصورة الرئيسية)، نعرضها عادي
     return True
 
-def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories, tour_label=""):
+def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories, tour_label="", notify_new_available=False):
     """
     يفحص تغيرات sold_out لكل درجة:
     - لو تحولت ل True  → تذاكر الدرجة دي خلصت!
@@ -419,24 +419,27 @@ def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, ci
 
         last_soldout = get_last_soldout(match_id, cat_id)
 
-        # درجة جديدة ظهرت وهي متاحة (زي تالتة شمال لو الزمالك فتح درجة جديدة)
-        if last_soldout is None and not curr_soldout:
-            send_notification(
-                f"فتح الحجز\n"
-                f"{cat_name}\n"
-                f"{t1_clean} ضد {t2_clean}\n"
-                f"{tour_label}\n\n"
-                f"{MATCHES_URL}"
-            )
-        # درجة جديدة ظهرت وهي خلصت من أول مرة
-        elif last_soldout is None and curr_soldout:
+        if last_soldout is None:
+            # أول مرة نشوف الدرجة دي
+            if not curr_soldout and notify_new_available:
+                # درجة جديدة اتضافت وهي متاحة (الماتش كان متتبع قبل كده)
+                send_notification(
+                    f"فتح الحجز\n"
+                    f"{cat_name}\n"
+                    f"{t1_clean} ضد {t2_clean}\n"
+                    f"{tour_label}\n\n"
+                    f"{MATCHES_URL}"
+                )
+            # لو نفذت من أول ما اتضافت → بس سجل بدون إشعار (الإشعار الأساسي كفاية)
+        elif last_soldout is False and curr_soldout:
+            # كانت متاحة وخلصت
             send_notification(
                 f"نفذت التذاكر\n"
                 f"{cat_name}\n"
                 f"{t1_clean} ضد {t2_clean}"
             )
-        # كانت خلصت وفتحت تاني
         elif last_soldout is True and not curr_soldout:
+            # كانت خلصت وفتحت تاني
             send_notification(
                 f"إعادة فتح الحجز\n"
                 f"{cat_name}\n"
@@ -639,7 +642,14 @@ def check_tickets_via_api():
 
             # ⭐ فحص تغيرات sold_out لكل درجة (للمباريات المفتوحة فقط)
             if curr_status == STATUS_OPEN:
-                check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories, tour_label)
+                # notify_new_available = True بس لو الماتش كان مفتوح قبل كده
+                # (مش أول مرة يشوفه، ومش بعد إغلاق وفتح)
+                notify_new = (
+                    last_state is not None
+                    and last_state[0] == STATUS_OPEN
+                    and curr_status == STATUS_OPEN
+                )
+                check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories, tour_label, notify_new)
 
             # تحديث قاعدة البيانات فقط عند تغير الحالة (لو مفيش إشعار اتبعت فوق)
             # ملحوظة: لو اتبعت إشعار فوق، الـ upsert_state تمت فعلياً، بس بنأكد هنا لو في حالة تانية
