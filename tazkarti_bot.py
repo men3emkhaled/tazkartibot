@@ -351,14 +351,19 @@ def get_categories(match_id):
 def is_popular_team(team_name):
     if not team_name: return False
     cleaned = normalize_arabic(clean_team_name(team_name).lower())
-    
+
     # 1. منع الفرق اللي فيها كلمات "بنك" أو "bank" عشان دي مش فرق جماهيرية (زي البنك الأهلي)
     if "بنك" in cleaned or "bank" in cleaned:
         return False
-    
+
     # 2. التأكد إن اسم الفريق فيه اسم من الفرق الجماهيرية المحددة
+    # بنجرب الاسم كامل + الاسم بدون "ال" التعريف عشان نتعرف على (اهلى) و (زمالك) وغيرها
     for p in EGYPTIAN_LEAGUE_TEAMS:
-        if normalize_arabic(p.lower()) in cleaned:
+        p_norm = normalize_arabic(p.lower())
+        if p_norm in cleaned:
+            return True
+        # لو الاسم بيبدأ بـ "ال"، نجرب بدونها (الاهلي → اهلي)
+        if p_norm.startswith("ال") and p_norm[2:] in cleaned:
             return True
     return False
 
@@ -394,7 +399,7 @@ def is_category_targeted(cat_name, t1, t2, t1_en, t2_en):
     # 4. لو مش مكتوب عليها اسم أي فريق (زي المقصورة الرئيسية)، نعرضها عادي
     return True
 
-def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories):
+def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories, tour_label=""):
     """
     يفحص تغيرات sold_out لكل درجة:
     - لو تحولت ل True  → تذاكر الدرجة دي خلصت!
@@ -414,19 +419,30 @@ def check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, ci
 
         last_soldout = get_last_soldout(match_id, cat_id)
 
-        # درجة جديدة خلصت من أول مرة
-        if last_soldout is None and curr_soldout:
+        # درجة جديدة ظهرت وهي متاحة (زي تالتة شمال لو الزمالك فتح درجة جديدة)
+        if last_soldout is None and not curr_soldout:
             send_notification(
-                f"💔 تذاكر {cat_name} خلصت! 💔\n\n"
-                f"{t1_clean} 🆚 {t2_clean}"
+                f"فتح الحجز\n"
+                f"{cat_name}\n"
+                f"{t1_clean} ضد {t2_clean}\n"
+                f"{tour_label}\n\n"
+                f"{MATCHES_URL}"
+            )
+        # درجة جديدة ظهرت وهي خلصت من أول مرة
+        elif last_soldout is None and curr_soldout:
+            send_notification(
+                f"نفذت التذاكر\n"
+                f"{cat_name}\n"
+                f"{t1_clean} ضد {t2_clean}"
             )
         # كانت خلصت وفتحت تاني
         elif last_soldout is True and not curr_soldout:
             send_notification(
-                f"🎉 تذاكر {cat_name} فتحت تاني! 🎉\n\n"
-                f"{t1_clean} 🆚 {t2_clean}\n"
-                f"💰 السعر: {price} ج.م\n\n"
-                f"🔗 {MATCHES_URL}"
+                f"إعادة فتح الحجز\n"
+                f"{cat_name}\n"
+                f"{t1_clean} ضد {t2_clean}\n"
+                f"{tour_label}\n\n"
+                f"{MATCHES_URL}"
             )
 
         # تحديث قاعدة البيانات فقط في حالة التغيير
@@ -567,10 +583,10 @@ def check_tickets_via_api():
             # 1. مباراة جديدة مفتوحة
             if last_state is None and curr_status == STATUS_OPEN:
                 success = send_notification(
-                    f"🟢 متاح للحجز الان 🟢\n\n"
-                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"فتح الحجز\n"
+                    f"{t1_clean} ضد {t2_clean}\n"
                     f"{tour_label}\n\n"
-                    f"🔗 {MATCHES_URL}"
+                    f"{MATCHES_URL}"
                 )
                 if success:
                     upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
@@ -578,8 +594,8 @@ def check_tickets_via_api():
             # 2. مباراة جديدة مغلقة
             elif last_state is None and curr_status == STATUS_CLOSED:
                 success = send_notification(
-                    f"🔒 إغلاق حجز 🔒\n\n"
-                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"إغلاق الحجز\n"
+                    f"{t1_clean} ضد {t2_clean}\n"
                     f"{tour_label}"
                 )
                 if success:
@@ -588,10 +604,10 @@ def check_tickets_via_api():
             # 3. الحجز كان مغلق وفتح
             elif last_status == STATUS_CLOSED and curr_status == STATUS_OPEN:
                 success = send_notification(
-                    f"💥 فتح الحجز من جديد! 💥\n\n"
-                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"إعادة فتح الحجز\n"
+                    f"{t1_clean} ضد {t2_clean}\n"
                     f"{tour_label}\n\n"
-                    f"🔗 {MATCHES_URL}"
+                    f"{MATCHES_URL}"
                 )
                 if success:
                     upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
@@ -599,8 +615,8 @@ def check_tickets_via_api():
             # 4. الحجز كان مفتوح واتقفل
             elif last_status == STATUS_OPEN and curr_status == STATUS_CLOSED:
                 success = send_notification(
-                    f"🛑 إغلاق الحجز 🛑\n\n"
-                    f"{t1_clean} 🆚 {t2_clean}\n"
+                    f"إغلاق الحجز\n"
+                    f"{t1_clean} ضد {t2_clean}\n"
                     f"{tour_label}"
                 )
                 if success:
@@ -609,11 +625,11 @@ def check_tickets_via_api():
             # ⭐ 5. الطابور وقف أو بدأ
             elif (last_status == STATUS_OPEN and curr_status == STATUS_OPEN
                   and last_is_queue != curr_is_queue):
-                status_text = "🚀 دخول مباشر بدون طابور! 🚀" if not curr_is_queue else "⚠️ بدأ طابور الانتظار! ⚠️"
+                status_text = "دخول مباشر بدون طابور" if not curr_is_queue else "بدأ طابور الانتظار"
                 success = send_notification(
-                    f"{status_text}\n\n"
-                    f"{t1_clean} 🆚 {t2_clean}\n\n"
-                    f"🔗 {MATCHES_URL}"
+                    f"{status_text}\n"
+                    f"{t1_clean} ضد {t2_clean}\n\n"
+                    f"{MATCHES_URL}"
                 )
                 if success:
                     upsert_state(match_id, curr_status, curr_is_queue, t1, t2, stadium, kick_off, gates_open)
@@ -623,7 +639,7 @@ def check_tickets_via_api():
 
             # ⭐ فحص تغيرات sold_out لكل درجة (للمباريات المفتوحة فقط)
             if curr_status == STATUS_OPEN:
-                check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories)
+                check_soldout_changes(match_id, t1, t2, t1_clean, t2_clean, t1_en, t2_en, circles, categories, tour_label)
 
             # تحديث قاعدة البيانات فقط عند تغير الحالة (لو مفيش إشعار اتبعت فوق)
             # ملحوظة: لو اتبعت إشعار فوق، الـ upsert_state تمت فعلياً، بس بنأكد هنا لو في حالة تانية

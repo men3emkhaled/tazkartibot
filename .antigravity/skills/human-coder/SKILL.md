@@ -8,7 +8,6 @@
 - NO AI MARKERS: Do not explain obvious logic or use repetitive AI-style bullet points.
 - PURE TECHNICAL DELIVERY: Provide only the code and essential technical notes in a professional, dry tone.
 
-
 ## Triggers
 - Human Style
 - No Emojis

@@ -23,3 +23,9 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+# Agent Assistant Skills & Context
+.antigravity/
+.gemini/
+CLAUDE.md
+GEMINI.md
+.github/copilot-instructions.md

@@ -1,27 +1,12 @@
 <available_skills>
   <skill>
-    <name>performance-pro</name>
-    <description>Deep optimization for execution speed, algorithmic efficiency, and memory usage.</description>
-    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/performance-pro/SKILL.md</location>
+    <name>arabic-localization</name>
+    <description>Ensure proper Right-to-Left text alignment for Arabic communication.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/arabic-localization/SKILL.md</location>
   </skill>
   <skill>
     <name>human-coder</name>
     <description>Professional human-like communication. Eliminates AI markers and excessive emojis.</description>
     <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/human-coder/SKILL.md</location>
-  </skill>
-  <skill>
-    <name>prompt-engineer</name>
-    <description>Craft precise, effective prompts for LLMs to maximize output quality and consistency.</description>
-    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/prompt-engineer/SKILL.md</location>
-  </skill>
-  <skill>
-    <name>design-system-architect</name>
-    <description>Architect scalable design systems with tokens, component libraries, and living documentation.</description>
-    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/design-system-architect/SKILL.md</location>
-  </skill>
-  <skill>
-    <name>seo-engineer</name>
-    <description>Optimize technical SEO, metadata, and semantic structure for maximum search visibility.</description>
-    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/seo-engineer/SKILL.md</location>
   </skill>
 </available_skills>
