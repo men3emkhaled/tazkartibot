@@ -9,4 +9,92 @@
     <description>Professional human-like communication. Eliminates AI markers and excessive emojis.</description>
     <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/human-coder/SKILL.md</location>
   </skill>
+  <skill>
+    <name>3d-web-experience</name>
+    <description>Expert in building 3D experiences for the web - Three.js, React
+  Three Fiber, Spline, WebGL, and interactive 3D scenes. Covers product
+  configurators, 3D portfolios, immersive websites, and bringing depth to web
+  experiences.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/3d-web-experience/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-page</name>
+    <description>Scaffold a new mobile-first page using StyleSeed Toss layout patterns, section rhythm, and existing shell components.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-page/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-ux-pro-max</name>
+    <description>Comprehensive design guide for web and mobile applications. Use when designing new UI components or pages, choosing color palettes and typography, or reviewing code for UX issues.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-ux-pro-max/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ux-flow</name>
+    <description>Design user flows and screen structure using StyleSeed UX patterns such as progressive disclosure, hub-and-spoke navigation, and information pyramids.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ux-flow/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ux-feedback</name>
+    <description>Add loading, empty, error, and success feedback states to StyleSeed components and pages with practical mobile-first rules.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ux-feedback/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>uxui-principles</name>
+    <description>Evaluate interfaces against 168 research-backed UX/UI principles, detect antipatterns, and inject UX context into AI coding sessions.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/uxui-principles/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>rayden-use</name>
+    <description>Build and maintain Rayden UI components and screens in Figma via Figma MCP with full design token enforcement</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/rayden-use/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-a11y</name>
+    <description>Audit a StyleSeed-based component or page for WCAG 2.2 AA issues and apply practical accessibility fixes where the code makes them safe.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-a11y/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-component</name>
+    <description>Generate a new UI component that follows StyleSeed Toss conventions for structure, tokens, accessibility, and component ergonomics.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-component/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-pattern</name>
+    <description>Generate reusable UI patterns such as card sections, grids, lists, forms, and chart wrappers using StyleSeed Toss primitives.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-pattern/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-review</name>
+    <description>Review UI code for StyleSeed design-system compliance, accessibility, mobile ergonomics, spacing discipline, and implementation quality.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-review/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-setup</name>
+    <description>Interactive StyleSeed setup wizard for choosing app type, brand color, visual style, typography, and the first screen scaffold.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-setup/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ui-tokens</name>
+    <description>List, add, and update StyleSeed design tokens while keeping JSON sources, CSS variables, and dark-mode values in sync.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ui-tokens/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ux-audit</name>
+    <description>Audit screens against Nielsen's heuristics and mobile UX best practices using the StyleSeed Toss design language as the implementation context.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ux-audit/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>ux-copy</name>
+    <description>Generate UX microcopy in StyleSeed's Toss-inspired voice for buttons, empty states, errors, toasts, confirmations, and form guidance.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/ux-copy/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>stitch-ui-design</name>
+    <description>Expert guidance for crafting effective prompts in Google Stitch, the AI-powered UI design tool by Google Labs. This skill helps create precise, actionable prompts that generate high-quality UI designs for web and mobile applications.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/stitch-ui-design/SKILL.md</location>
+  </skill>
+  <skill>
+    <name>data-scientist</name>
+    <description>Expert data scientist for advanced analytics, machine learning, and statistical modeling. Handles complex data analysis, predictive modeling, and business intelligence.</description>
+    <location>/home/men3emk1/Music/tazkartibot-master/.antigravity/skills/data-scientist/SKILL.md</location>
+  </skill>
 </available_skills>

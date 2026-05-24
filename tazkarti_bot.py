@@ -113,9 +113,9 @@ STATUS_CLOSED = 2
 
 EGYPTIAN_LEAGUE_TEAMS = [
     "الأهلي", "الزمالك", "الإسماعيلي", "المصري",
-    "الاتحاد", "غزل المحلة", "بلدية المحلة",
+    "الاتحاد", "غزل المحلة", "بلدية المحلة", "منتخب مصر",
     "Al Ahly", "Zamalek", "ISMAILY", "Ismaily", "Al Masry",
-    "Alithad", "Ittihad", "Ghazl Elmahala", "Baladiyat"
+    "Alithad", "Ittihad", "Ghazl Elmahala", "Baladiyat", "Egypt"
 ]
 
 TEAM_COLORS = {
@@ -125,7 +125,8 @@ TEAM_COLORS = {
     "المصري": "🟢", "Al Masry": "🟢",
     "الاتحاد": "🟢", "Alithad": "🟢", "Ittihad": "🟢",
     "غزل المحلة": "🔵", "Ghazl Elmahala": "🔵",
-    "بلدية المحلة": "🟠", "Baladiyat": "🟠"
+    "بلدية المحلة": "🟠", "Baladiyat": "🟠",
+    "مصر": "🔴", "Egypt": "🔴"
 }
 
 # ==========================================
@@ -367,7 +368,11 @@ def is_popular_team(team_name):
     if "بنك" in cleaned or "bank" in cleaned:
         return False
 
-    # 2. التأكد إن اسم الفريق فيه اسم من الفرق الجماهيرية المحددة
+    # 2. فحص منتخب مصر
+    if "egypt" in cleaned or "منتخب مصر" in cleaned or "المنتخب المصري" in cleaned or cleaned == "مصر":
+        return True
+
+    # 3. التأكد إن اسم الفريق فيه اسم من الفرق الجماهيرية المحددة
     # بنجرب الاسم كامل + الاسم بدون "ال" التعريف عشان نتعرف على (اهلى) و (زمالك) وغيرها
     for p in EGYPTIAN_LEAGUE_TEAMS:
         p_norm = normalize_arabic(p.lower())
