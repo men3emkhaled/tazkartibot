@@ -70,6 +70,14 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 PUBLIC_CHAT_ID = os.getenv("PUBLIC_CHAT_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# التحقق من وجود المتغيرات الأساسية قبل بدء البوت
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("❌ خطأ: لم يتم العثور على متغير البيئة TELEGRAM_BOT_TOKEN. يرجى التأكد من ضبطه في ملف .env أو في إعدادات البيئة (Environment Variables) للمستضيف.")
+if not TELEGRAM_CHAT_ID:
+    raise ValueError("❌ خطأ: لم يتم العثور على متغير البيئة TELEGRAM_CHAT_ID. يرجى التأكد من ضبطه في ملف .env أو في إعدادات البيئة للمستضيف.")
+if not DATABASE_URL:
+    raise ValueError("❌ خطأ: لم يتم العثور على متغير البيئة DATABASE_URL. يرجى التأكد من ضبطه في ملف .env أو في إعدادات البيئة للمستضيف.")
+
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
 API_URL       = "https://tazkarti.com/data/matches-list-json.json"
