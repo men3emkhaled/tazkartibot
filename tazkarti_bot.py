@@ -67,6 +67,7 @@ def clean_team_name(name):
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+PUBLIC_CHAT_ID = os.getenv("PUBLIC_CHAT_ID")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
@@ -143,33 +144,45 @@ def init_db():
     conn = get_db()
     if conn:
         c = conn.cursor()
-        # جدول حالة الحجز والطابور لكل مباراة
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS match_status_tracker (
-                match_id      BIGINT PRIMARY KEY,
-                last_status   INTEGER NOT NULL,
-                last_is_queue BOOLEAN NOT NULL DEFAULT FALSE,
-                team1_ar      TEXT,
-                team2_ar      TEXT,
-                stadium       TEXT,
-                kick_off      TEXT,
-                gates_open    TEXT
-            )
-        ''')
-        # جدول تتبع حالة sold_out لكل درجة في كل مباراة
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS category_soldout_tracker (
-                match_id      BIGINT NOT NULL,
-                category_id   BIGINT NOT NULL,
-                category_name TEXT,
-                price         NUMERIC,
-                last_soldout  BOOLEAN NOT NULL DEFAULT FALSE,
-                PRIMARY KEY (match_id, category_id)
-            )
-        ''')
-        conn.commit()
-        c.close()
-        conn.close()
+        try:
+            # جدول حالة الحجز والطابور لكل مباراة
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS match_status_tracker (
+                    match_id      BIGINT PRIMARY KEY,
+                    last_status   INTEGER NOT NULL,
+                    last_is_queue BOOLEAN NOT NULL DEFAULT FALSE,
+                    team1_ar      TEXT,
+                    team2_ar      TEXT,
+                    stadium       TEXT,
+                    kick_off      TEXT,
+                    gates_open    TEXT
+                )
+            ''')
+            # جدول تتبع حالة sold_out لكل درجة في كل مباراة
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS category_soldout_tracker (
+                    match_id      BIGINT NOT NULL,
+                    category_id   BIGINT NOT NULL,
+                    category_name TEXT,
+                    price         NUMERIC,
+                    last_soldout  BOOLEAN NOT NULL DEFAULT FALSE,
+                    PRIMARY KEY (match_id, category_id)
+                )
+            ''')
+            # جدول الإشعارات المؤجلة لإرسالها للقناة العامة بعد 10 دقائق
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS delayed_notifications (
+                    id             SERIAL PRIMARY KEY,
+                    message_text   TEXT NOT NULL,
+                    scheduled_time TIMESTAMP WITH TIME ZONE NOT NULL,
+                    sent           BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at     TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+        finally:
+            c.close()
+            conn.close()
 
 MATCH_STATE_CACHE = {}
 CATEGORY_SOLDOUT_CACHE = {}
@@ -263,14 +276,102 @@ def get_queue_match_ids():
 # ==========================================
 # 📤 إرسال إشعار
 # ==========================================
+def send_delayed_notification_fallback(msg):
+    try:
+        bot.send_message(PUBLIC_CHAT_ID, msg)
+        print("✅ تم إرسال الإشعار المؤجل (الاحتياطي في الذاكرة) للقناة العامة.")
+    except Exception as e:
+        print(f"❌ خطأ في إرسال الإشعار المؤجل (الاحتياطي في الذاكرة) للقناة العامة: {e}")
+
 def send_notification(msg):
     print(msg)
+    sent_private = False
     try:
+        # إرسال فوري للقناة الخاصة الجديدة
         bot.send_message(TELEGRAM_CHAT_ID, msg)
-        return True
+        sent_private = True
     except Exception as e:
-        print(f"❌ خطأ في الإرسال: {e}")
-        return False
+        print(f"❌ خطأ في الإرسال للقناة الخاصة: {e}")
+
+    # إذا تم الإرسال للقناة الخاصة بنجاح، نقوم بجدولة الإرسال للقناة العامة بعد 10 دقائق
+    if sent_private:
+        conn = None
+        try:
+            conn = get_db()
+            if conn:
+                c = conn.cursor()
+                try:
+                    c.execute('''
+                        INSERT INTO delayed_notifications (message_text, scheduled_time)
+                        VALUES (%s, NOW() + INTERVAL '10 minutes')
+                    ''', (msg,))
+                    conn.commit()
+                    print("✅ تم جدولة الإشعار للقناة العامة بعد 10 دقائق في قاعدة البيانات.")
+                finally:
+                    c.close()
+            else:
+                # Fallback to threading.Timer in memory
+                print("⚠️ تعذر الاتصال بـ DB لجدولة الإشعار. استخدام المؤقت المحلي الاحتياطي.")
+                t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
+                t.daemon = True
+                t.start()
+        except Exception as db_err:
+            print(f"❌ خطأ في جدولة الإشعار في قاعدة البيانات: {db_err}")
+            # Fallback to threading.Timer in memory
+            t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
+            t.daemon = True
+            t.start()
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    return sent_private
+
+def process_delayed_notifications():
+    print("⏳ بدأ معالج الإشعارات المؤجلة...")
+    while True:
+        conn = None
+        try:
+            conn = get_db()
+            if conn:
+                c = conn.cursor()
+                try:
+                    # جلب الإشعارات التي حان وقت إرسالها ولم تُرسل بعد
+                    c.execute('''
+                        SELECT id, message_text 
+                        FROM delayed_notifications 
+                        WHERE scheduled_time <= NOW() AND sent = FALSE
+                        ORDER BY scheduled_time ASC
+                    ''')
+                    pending = c.fetchall()
+                    
+                    for row in pending:
+                        msg_id, msg_text = row
+                        print(f"🕒 حان وقت إرسال الإشعار المؤجل {msg_id} للقناة العامة...")
+                        try:
+                            bot.send_message(PUBLIC_CHAT_ID, msg_text)
+                            # حذف الإشعار بعد إرساله بنجاح
+                            c.execute('DELETE FROM delayed_notifications WHERE id = %s', (msg_id,))
+                            conn.commit()
+                            print(f"✅ تم إرسال وحذف الإشعار المؤجل {msg_id} بنجاح.")
+                        except Exception as e:
+                            print(f"❌ خطأ في إرسال الإشعار المؤجل {msg_id} للقناة العامة: {e}")
+                finally:
+                    c.close()
+        except Exception as e:
+            print(f"❌ خطأ في معالج الإشعارات المؤجلة: {e}")
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        
+        # فحص كل 10 ثوانٍ
+        time.sleep(10)
 
 # ==========================================
 # 🤖 أوامر تليجرام
@@ -721,6 +822,9 @@ if __name__ == "__main__":
 
     polling_thread = threading.Thread(target=start_telegram_polling, daemon=True)
     polling_thread.start()
+
+    delayed_thread = threading.Thread(target=process_delayed_notifications, daemon=True)
+    delayed_thread.start()
 
     try:
         while True:
