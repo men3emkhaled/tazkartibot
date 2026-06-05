@@ -295,26 +295,36 @@ def send_notification(msg):
     print(msg)
     sent_private = False
     try:
-        # إرسال فوري للقناة الخاصة الجديدة
+        # إرسال فوري للقناة الخاصة فقط (مش العامة!)
         bot.send_message(TELEGRAM_CHAT_ID, msg)
         sent_private = True
+        print(f"✅ تم الإرسال للقناة الخاصة: {TELEGRAM_CHAT_ID}")
     except Exception as e:
         print(f"❌ خطأ في الإرسال للقناة الخاصة: {e}")
 
-    # إذا تم الإرسال للقناة الخاصة بنجاح، نقوم بجدولة الإرسال للقناة العامة بعد 10 دقائق
-    if sent_private:
+    # جدولة الإرسال للقناة العامة بعد 10 دقائق (بس لو القناة العامة مختلفة عن الخاصة)
+    if sent_private and PUBLIC_CHAT_ID and str(PUBLIC_CHAT_ID) != str(TELEGRAM_CHAT_ID):
         conn = None
         try:
             conn = get_db()
             if conn:
                 c = conn.cursor()
                 try:
+                    # حماية من التكرار: لو نفس الرسالة موجودة ولسه ما اتبعتتش، ما نضيفهاش تاني
                     c.execute('''
-                        INSERT INTO delayed_notifications (message_text, scheduled_time)
-                        VALUES (%s, NOW() + INTERVAL '10 minutes')
+                        SELECT COUNT(*) FROM delayed_notifications
+                        WHERE message_text = %s AND sent = FALSE
                     ''', (msg,))
-                    conn.commit()
-                    print("✅ تم جدولة الإشعار للقناة العامة بعد 10 دقائق في قاعدة البيانات.")
+                    existing = c.fetchone()[0]
+                    if existing > 0:
+                        print("⚠️ الإشعار موجود بالفعل في قائمة الانتظار، تم تجاهل التكرار.")
+                    else:
+                        c.execute('''
+                            INSERT INTO delayed_notifications (message_text, scheduled_time)
+                            VALUES (%s, NOW() + INTERVAL '10 minutes')
+                        ''', (msg,))
+                        conn.commit()
+                        print(f"✅ تم جدولة الإشعار للقناة العامة ({PUBLIC_CHAT_ID}) بعد 10 دقائق.")
                 finally:
                     c.close()
             else:
@@ -335,11 +345,45 @@ def send_notification(msg):
                     conn.close()
                 except Exception:
                     pass
+    elif sent_private and (not PUBLIC_CHAT_ID or str(PUBLIC_CHAT_ID) == str(TELEGRAM_CHAT_ID)):
+        print("⚠️ القناة العامة هي نفس القناة الخاصة أو غير مُعرّفة، تم تخطي الجدولة.")
 
     return sent_private
 
+def cleanup_stale_notifications():
+    """حذف الإشعارات القديمة جداً (أكتر من 20 دقيقة من وقت الجدولة) عند بدء التشغيل"""
+    conn = None
+    try:
+        conn = get_db()
+        if conn:
+            c = conn.cursor()
+            try:
+                # حذف الإشعارات اللي فات وقتها بأكتر من 20 دقيقة (يعني قديمة ومش منطقي نبعتها)
+                c.execute('''
+                    DELETE FROM delayed_notifications 
+                    WHERE sent = FALSE AND scheduled_time < NOW() - INTERVAL '20 minutes'
+                    RETURNING id
+                ''')
+                deleted = c.fetchall()
+                if deleted:
+                    print(f"🗑️ تم حذف {len(deleted)} إشعار(ات) قديمة من قائمة الانتظار عند بدء التشغيل.")
+                conn.commit()
+            finally:
+                c.close()
+    except Exception as e:
+        print(f"⚠️ خطأ في تنظيف الإشعارات القديمة: {e}")
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
 def process_delayed_notifications():
     print("⏳ بدأ معالج الإشعارات المؤجلة...")
+    # تنظيف أي إشعارات قديمة متبقية من تشغيل سابق
+    cleanup_stale_notifications()
+    
     while True:
         conn = None
         try:
@@ -348,25 +392,45 @@ def process_delayed_notifications():
                 c = conn.cursor()
                 try:
                     # جلب الإشعارات التي حان وقت إرسالها ولم تُرسل بعد
+                    # بس بنتجاهل اللي فات وقتها بأكتر من 20 دقيقة (حماية إضافية)
                     c.execute('''
-                        SELECT id, message_text 
+                        SELECT id, message_text, scheduled_time
                         FROM delayed_notifications 
-                        WHERE scheduled_time <= NOW() AND sent = FALSE
+                        WHERE scheduled_time <= NOW() 
+                          AND sent = FALSE
+                          AND scheduled_time > NOW() - INTERVAL '20 minutes'
                         ORDER BY scheduled_time ASC
                     ''')
                     pending = c.fetchall()
                     
+                    if pending:
+                        print(f"📬 تم العثور على {len(pending)} إشعار(ات) مؤجلة جاهزة للإرسال.")
+                    
                     for row in pending:
-                        msg_id, msg_text = row
-                        print(f"🕒 حان وقت إرسال الإشعار المؤجل {msg_id} للقناة العامة...")
+                        msg_id, msg_text, sched_time = row
+                        print(f"🕒 إرسال الإشعار المؤجل #{msg_id} (مجدول: {sched_time}) للقناة العامة {PUBLIC_CHAT_ID}...")
                         try:
                             bot.send_message(PUBLIC_CHAT_ID, msg_text)
                             # حذف الإشعار بعد إرساله بنجاح
                             c.execute('DELETE FROM delayed_notifications WHERE id = %s', (msg_id,))
                             conn.commit()
-                            print(f"✅ تم إرسال وحذف الإشعار المؤجل {msg_id} بنجاح.")
+                            print(f"✅ تم إرسال وحذف الإشعار المؤجل #{msg_id} بنجاح.")
                         except Exception as e:
-                            print(f"❌ خطأ في إرسال الإشعار المؤجل {msg_id} للقناة العامة: {e}")
+                            print(f"❌ خطأ في إرسال الإشعار المؤجل #{msg_id}: {e}")
+                            # لو فشل الإرسال، نحذفه برضو عشان مايتكررش للأبد
+                            c.execute('DELETE FROM delayed_notifications WHERE id = %s', (msg_id,))
+                            conn.commit()
+                            print(f"🗑️ تم حذف الإشعار #{msg_id} الفاشل لمنع التكرار.")
+                    
+                    # تنظيف دوري: حذف أي إشعارات قديمة جداً لسه موجودة
+                    c.execute('''
+                        DELETE FROM delayed_notifications 
+                        WHERE scheduled_time < NOW() - INTERVAL '20 minutes'
+                    ''')
+                    if c.rowcount > 0:
+                        conn.commit()
+                        print(f"🗑️ تنظيف دوري: حذف {c.rowcount} إشعار(ات) قديمة.")
+                        
                 finally:
                     c.close()
         except Exception as e:
@@ -378,8 +442,8 @@ def process_delayed_notifications():
                 except Exception:
                     pass
         
-        # فحص كل 10 ثوانٍ
-        time.sleep(10)
+        # فحص كل 30 ثانية (بدل 10 عشان نقلل الضغط على الـ DB)
+        time.sleep(30)
 
 # ==========================================
 # 🤖 أوامر تليجرام
