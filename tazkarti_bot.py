@@ -4,6 +4,7 @@ import re
 import requests
 import psycopg2
 import threading
+import hashlib
 import telebot
 import random
 from datetime import datetime
@@ -85,6 +86,10 @@ QUEUE_API_URL = "https://tazkarti.com/data/fanQueuesMatch-list-json.json"
 SEATS_API_URL = "https://tazkarti.com/data/TicketPrice-AvailableSeats-{match_id}.json"
 MATCHES_URL   = "https://tazkarti.com/#/matches"
 CHECK_INTERVAL_SECONDS = 2
+
+# Lock لمنع إرسال نفس الإشعار أكتر من مرة في نفس اللحظة
+_notification_lock = threading.Lock()
+_recently_sent = {}  # hash -> timestamp, لمنع التكرار خلال 60 ثانية
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -287,22 +292,46 @@ def get_queue_match_ids():
 def send_delayed_notification_fallback(msg):
     try:
         bot.send_message(PUBLIC_CHAT_ID, msg)
-        print("✅ تم إرسال الإشعار المؤجل (الاحتياطي في الذاكرة) للقناة العامة.")
+        print(f"✅ [{time.strftime('%H:%M:%S')}] تم إرسال الإشعار المؤجل (الاحتياطي في الذاكرة) للقناة العامة {PUBLIC_CHAT_ID}.")
     except Exception as e:
-        print(f"❌ خطأ في إرسال الإشعار المؤجل (الاحتياطي في الذاكرة) للقناة العامة: {e}")
+        print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في إرسال الإشعار المؤجل (الاحتياطي في الذاكرة) للقناة العامة: {e}")
+
+def _msg_hash(msg):
+    """يعمل hash للرسالة عشان نستخدمه في منع التكرار"""
+    return hashlib.md5(msg.encode('utf-8')).hexdigest()
 
 def send_notification(msg):
+    """إرسال إشعار للقناة الخاصة فوراً + جدولة للقناة العامة بعد 10 دقائق"""
+    
+    # حماية من التكرار: لو نفس الرسالة اتبعتت خلال آخر 60 ثانية، تجاهلها
+    msg_h = _msg_hash(msg)
+    now = time.time()
+    
+    with _notification_lock:
+        # تنظيف الرسائل القديمة من الكاش (أكتر من 60 ثانية)
+        stale_keys = [k for k, v in _recently_sent.items() if now - v > 60]
+        for k in stale_keys:
+            del _recently_sent[k]
+        
+        if msg_h in _recently_sent:
+            print(f"⚠️ [{time.strftime('%H:%M:%S')}] تكرار إشعار مكرر خلال 60 ثانية، تم التجاهل.")
+            return True  # نرجع True عشان الكود يكمل عادي ويحدث الحالة
+        
+        _recently_sent[msg_h] = now
+    
+    print(f"\n📢 [{time.strftime('%H:%M:%S')}] إشعار جديد:")
     print(msg)
+    
     sent_private = False
     try:
-        # إرسال فوري للقناة الخاصة فقط (مش العامة!)
+        # ⚡ إرسال فوري للقناة الخاصة فقط
         bot.send_message(TELEGRAM_CHAT_ID, msg)
         sent_private = True
-        print(f"✅ تم الإرسال للقناة الخاصة: {TELEGRAM_CHAT_ID}")
+        print(f"✅ [{time.strftime('%H:%M:%S')}] تم الإرسال الفوري للقناة الخاصة: {TELEGRAM_CHAT_ID}")
     except Exception as e:
-        print(f"❌ خطأ في الإرسال للقناة الخاصة: {e}")
+        print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في الإرسال للقناة الخاصة: {e}")
 
-    # جدولة الإرسال للقناة العامة بعد 10 دقائق (بس لو القناة العامة مختلفة عن الخاصة)
+    # ⏳ جدولة الإرسال للقناة العامة بعد 10 دقائق
     if sent_private and PUBLIC_CHAT_ID and str(PUBLIC_CHAT_ID) != str(TELEGRAM_CHAT_ID):
         conn = None
         try:
@@ -317,24 +346,24 @@ def send_notification(msg):
                     ''', (msg,))
                     existing = c.fetchone()[0]
                     if existing > 0:
-                        print("⚠️ الإشعار موجود بالفعل في قائمة الانتظار، تم تجاهل التكرار.")
+                        print(f"⚠️ [{time.strftime('%H:%M:%S')}] الإشعار موجود بالفعل في قائمة الانتظار، تم تجاهل التكرار.")
                     else:
                         c.execute('''
                             INSERT INTO delayed_notifications (message_text, scheduled_time)
                             VALUES (%s, NOW() + INTERVAL '10 minutes')
                         ''', (msg,))
                         conn.commit()
-                        print(f"✅ تم جدولة الإشعار للقناة العامة ({PUBLIC_CHAT_ID}) بعد 10 دقائق.")
+                        print(f"⏳ [{time.strftime('%H:%M:%S')}] تم جدولة الإشعار للقناة العامة ({PUBLIC_CHAT_ID}) بعد 10 دقائق.")
                 finally:
                     c.close()
             else:
                 # Fallback to threading.Timer in memory
-                print("⚠️ تعذر الاتصال بـ DB لجدولة الإشعار. استخدام المؤقت المحلي الاحتياطي.")
+                print(f"⚠️ [{time.strftime('%H:%M:%S')}] تعذر الاتصال بـ DB لجدولة الإشعار. استخدام المؤقت المحلي الاحتياطي.")
                 t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
                 t.daemon = True
                 t.start()
         except Exception as db_err:
-            print(f"❌ خطأ في جدولة الإشعار في قاعدة البيانات: {db_err}")
+            print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في جدولة الإشعار في قاعدة البيانات: {db_err}")
             # Fallback to threading.Timer in memory
             t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
             t.daemon = True
@@ -346,7 +375,7 @@ def send_notification(msg):
                 except Exception:
                     pass
     elif sent_private and (not PUBLIC_CHAT_ID or str(PUBLIC_CHAT_ID) == str(TELEGRAM_CHAT_ID)):
-        print("⚠️ القناة العامة هي نفس القناة الخاصة أو غير مُعرّفة، تم تخطي الجدولة.")
+        print(f"⚠️ [{time.strftime('%H:%M:%S')}] القناة العامة هي نفس القناة الخاصة أو غير مُعرّفة، تم تخطي الجدولة.")
 
     return sent_private
 
@@ -380,7 +409,7 @@ def cleanup_stale_notifications():
                 pass
 
 def process_delayed_notifications():
-    print("⏳ بدأ معالج الإشعارات المؤجلة...")
+    print(f"⏳ [{time.strftime('%H:%M:%S')}] بدأ معالج الإشعارات المؤجلة...")
     # تنظيف أي إشعارات قديمة متبقية من تشغيل سابق
     cleanup_stale_notifications()
     
@@ -404,19 +433,19 @@ def process_delayed_notifications():
                     pending = c.fetchall()
                     
                     if pending:
-                        print(f"📬 تم العثور على {len(pending)} إشعار(ات) مؤجلة جاهزة للإرسال.")
+                        print(f"📬 [{time.strftime('%H:%M:%S')}] تم العثور على {len(pending)} إشعار(ات) مؤجلة جاهزة للإرسال للقناة العامة.")
                     
                     for row in pending:
                         msg_id, msg_text, sched_time = row
-                        print(f"🕒 إرسال الإشعار المؤجل #{msg_id} (مجدول: {sched_time}) للقناة العامة {PUBLIC_CHAT_ID}...")
+                        print(f"🕒 [{time.strftime('%H:%M:%S')}] إرسال الإشعار المؤجل #{msg_id} (مجدول: {sched_time}) للقناة العامة {PUBLIC_CHAT_ID}...")
                         try:
                             bot.send_message(PUBLIC_CHAT_ID, msg_text)
                             # حذف الإشعار بعد إرساله بنجاح
                             c.execute('DELETE FROM delayed_notifications WHERE id = %s', (msg_id,))
                             conn.commit()
-                            print(f"✅ تم إرسال وحذف الإشعار المؤجل #{msg_id} بنجاح.")
+                            print(f"✅ [{time.strftime('%H:%M:%S')}] تم إرسال الإشعار المؤجل #{msg_id} للقناة العامة {PUBLIC_CHAT_ID} بنجاح.")
                         except Exception as e:
-                            print(f"❌ خطأ في إرسال الإشعار المؤجل #{msg_id}: {e}")
+                            print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في إرسال الإشعار المؤجل #{msg_id}: {e}")
                             # لو فشل الإرسال، نحذفه برضو عشان مايتكررش للأبد
                             c.execute('DELETE FROM delayed_notifications WHERE id = %s', (msg_id,))
                             conn.commit()
@@ -429,12 +458,12 @@ def process_delayed_notifications():
                     ''')
                     if c.rowcount > 0:
                         conn.commit()
-                        print(f"🗑️ تنظيف دوري: حذف {c.rowcount} إشعار(ات) قديمة.")
+                        print(f"🗑️ [{time.strftime('%H:%M:%S')}] تنظيف دوري: حذف {c.rowcount} إشعار(ات) قديمة.")
                         
                 finally:
                     c.close()
         except Exception as e:
-            print(f"❌ خطأ في معالج الإشعارات المؤجلة: {e}")
+            print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في معالج الإشعارات المؤجلة: {e}")
         finally:
             if conn:
                 try:
@@ -887,10 +916,15 @@ def check_tickets_via_api():
 
 if __name__ == "__main__":
     print("🚀 Super Bot يعمل الآن!")
+    print(f"📡 القناة الخاصة (فوري): {TELEGRAM_CHAT_ID}")
+    print(f"📡 القناة العامة (بعد 10 دقايق): {PUBLIC_CHAT_ID}")
     print("اضغط Ctrl+C للإيقاف.")
 
     init_db()
     load_state_from_db()
+    
+    # ⚠️ تنظيف أي إشعارات عالقة من تشغيل سابق عشان مايتبعتوش فوراً
+    cleanup_stale_notifications()
 
     polling_thread = threading.Thread(target=start_telegram_polling, daemon=True)
     polling_thread.start()
