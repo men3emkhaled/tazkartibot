@@ -300,6 +300,33 @@ def _msg_hash(msg):
     """يعمل hash للرسالة عشان نستخدمه في منع التكرار"""
     return hashlib.md5(msg.encode('utf-8')).hexdigest()
 
+_resolved_chat_ids = {}
+
+def _canonical_chat_id(chat_ref):
+    """يرجع Telegram chat id الحقيقي حتى لو الوجهة مكتوبة كـ @username."""
+    if not chat_ref:
+        return None
+
+    cache_key = str(chat_ref).strip()
+    if cache_key in _resolved_chat_ids:
+        return _resolved_chat_ids[cache_key]
+
+    try:
+        resolved_id = str(bot.get_chat(chat_ref).id)
+        _resolved_chat_ids[cache_key] = resolved_id
+        return resolved_id
+    except Exception as e:
+        # لو Telegram غير متاح مؤقتاً، نرجع للمقارنة النصية بدون تخزين النتيجة
+        # حتى نحاول حل الهوية الحقيقية مرة أخرى في الإشعار التالي.
+        print(f"⚠️ [{time.strftime('%H:%M:%S')}] تعذر التحقق من هوية القناة {cache_key}: {e}")
+        return cache_key.lower()
+
+def _same_telegram_destination(first, second):
+    """يتحقق إن مرجعين يشيران لنفس قناة Telegram فعلياً."""
+    if not first or not second:
+        return False
+    return _canonical_chat_id(first) == _canonical_chat_id(second)
+
 def send_notification(msg):
     """إرسال إشعار للقناة الخاصة فوراً + جدولة للقناة العامة بعد 10 دقائق"""
     
@@ -323,22 +350,31 @@ def send_notification(msg):
     print(msg)
     
     sent_private = False
-    try:
-        # ⚡ إرسال فوري للقناة الخاصة فقط
-        bot.send_message(TELEGRAM_CHAT_ID, msg)
-        sent_private = True
-        print(f"✅ [{time.strftime('%H:%M:%S')}] تم الإرسال الفوري للقناة الخاصة: {TELEGRAM_CHAT_ID}")
-    except Exception as e:
-        print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في الإرسال للقناة الخاصة: {e}")
+    public_is_private_destination = _same_telegram_destination(TELEGRAM_CHAT_ID, PUBLIC_CHAT_ID)
+
+    if public_is_private_destination:
+        # حماية أساسية: ممنوع إرسال القناة العامة فورياً حتى لو اتكتبت مرة
+        # بالرقم ومرة بالـ username. ستُرسل فقط من قائمة الانتظار بعد 10 دقائق.
+        print(f"⏳ [{time.strftime('%H:%M:%S')}] الوجهة الفورية هي نفس القناة العامة؛ تم تخطي الإرسال الفوري.")
+    else:
+        try:
+            # ⚡ إرسال فوري للقناة الخاصة فقط
+            bot.send_message(TELEGRAM_CHAT_ID, msg)
+            sent_private = True
+            print(f"✅ [{time.strftime('%H:%M:%S')}] تم الإرسال الفوري للقناة الخاصة: {TELEGRAM_CHAT_ID}")
+        except Exception as e:
+            print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في الإرسال للقناة الخاصة: {e}")
 
     # ⏳ جدولة الإرسال للقناة العامة بعد 10 دقائق
-    if sent_private and PUBLIC_CHAT_ID and str(PUBLIC_CHAT_ID) != str(TELEGRAM_CHAT_ID):
+    scheduled_public = False
+    if PUBLIC_CHAT_ID:
         conn = None
         try:
             conn = get_db()
             if conn:
-                c = conn.cursor()
+                c = None
                 try:
+                    c = conn.cursor()
                     # حماية من التكرار: لو نفس الرسالة موجودة ولسه ما اتبعتتش، ما نضيفهاش تاني
                     c.execute('''
                         SELECT COUNT(*) FROM delayed_notifications
@@ -347,37 +383,47 @@ def send_notification(msg):
                     existing = c.fetchone()[0]
                     if existing > 0:
                         print(f"⚠️ [{time.strftime('%H:%M:%S')}] الإشعار موجود بالفعل في قائمة الانتظار، تم تجاهل التكرار.")
+                        scheduled_public = True
                     else:
                         c.execute('''
                             INSERT INTO delayed_notifications (message_text, scheduled_time)
                             VALUES (%s, NOW() + INTERVAL '10 minutes')
                         ''', (msg,))
                         conn.commit()
+                        scheduled_public = True
                         print(f"⏳ [{time.strftime('%H:%M:%S')}] تم جدولة الإشعار للقناة العامة ({PUBLIC_CHAT_ID}) بعد 10 دقائق.")
                 finally:
-                    c.close()
+                    if c:
+                        c.close()
             else:
                 # Fallback to threading.Timer in memory
                 print(f"⚠️ [{time.strftime('%H:%M:%S')}] تعذر الاتصال بـ DB لجدولة الإشعار. استخدام المؤقت المحلي الاحتياطي.")
                 t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
                 t.daemon = True
                 t.start()
+                scheduled_public = True
         except Exception as db_err:
-            print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ في جدولة الإشعار في قاعدة البيانات: {db_err}")
-            # Fallback to threading.Timer in memory
-            t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
-            t.daemon = True
-            t.start()
+            # لا نشغل المؤقت الاحتياطي لو الـ INSERT تم بالفعل ثم فشلت خطوة
+            # لاحقة (مثل طباعة السجل)، وإلا ستصل الرسالة العامة مرتين.
+            if not scheduled_public:
+                t = threading.Timer(600.0, send_delayed_notification_fallback, args=[msg])
+                t.daemon = True
+                t.start()
+                scheduled_public = True
+            try:
+                print(f"❌ [{time.strftime('%H:%M:%S')}] خطأ أثناء جدولة الإشعار في قاعدة البيانات: {db_err}")
+            except OSError:
+                pass
         finally:
             if conn:
                 try:
                     conn.close()
                 except Exception:
                     pass
-    elif sent_private and (not PUBLIC_CHAT_ID or str(PUBLIC_CHAT_ID) == str(TELEGRAM_CHAT_ID)):
-        print(f"⚠️ [{time.strftime('%H:%M:%S')}] القناة العامة هي نفس القناة الخاصة أو غير مُعرّفة، تم تخطي الجدولة.")
+    else:
+        print(f"⚠️ [{time.strftime('%H:%M:%S')}] القناة العامة غير مُعرّفة، تم تخطي الجدولة.")
 
-    return sent_private
+    return sent_private or scheduled_public
 
 def cleanup_stale_notifications():
     """حذف الإشعارات القديمة جداً (أكتر من 20 دقيقة من وقت الجدولة) عند بدء التشغيل"""
